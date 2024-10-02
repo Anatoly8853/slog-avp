@@ -1,4 +1,4 @@
-module slog-avp
+module github.com/Anatoly8853/slog-avp
 
 go 1.23.2
 
