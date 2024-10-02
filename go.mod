@@ -1,6 +1,6 @@
 module github.com/Anatoly8853/slog-avp
 
-go 1.23.2
+go 1.22.0
 
 require github.com/gookit/slog v0.5.6
 
