@@ -12,6 +12,10 @@ import (
 	"github.com/gookit/slog/handler"
 )
 
+type Application struct {
+	Log *slog.Logger
+}
+
 // Глобальные переменные с начальными значениями.
 var (
 	logConsole  = true

@@ -2,14 +2,9 @@ package main
 
 import (
 	"github.com/Anatoly8853/slog-avp"
-	"github.com/gookit/slog"
 )
 
-type Application struct {
-	Log *slog.Logger
-}
-
-func SetupApplication() *Application {
+func SetupApplication() *slogavp.Application {
 	// Настройка логгера перед его инициализацией
 	slogavp.SetLogConsole(false) // Логи будут записываться в файл
 	slogavp.SetIsDebugMode(true)
@@ -18,7 +13,7 @@ func SetupApplication() *Application {
 	// Настраиваем логгер
 	logger := slogavp.SetupLogger()
 	// Создаем экземпляр Application с настроенным логгером
-	return &Application{Log: logger}
+	return &slogavp.Application{Log: logger}
 }
 
 func main() {
