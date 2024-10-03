@@ -1,7 +1,7 @@
 package main
 
 import (
-	slogavp "github.com/Anatoly8853/slog-avp"
+	"github.com/Anatoly8853/slog-avp"
 	"github.com/gookit/slog"
 )
 
