@@ -2,7 +2,10 @@ module github.com/Anatoly8853/slog-avp
 
 go 1.22.0
 
-require github.com/gookit/slog v0.5.6
+require (
+	github.com/gookit/slog v0.5.6
+	github.com/mattn/go-sqlite3 v1.14.24
+)
 
 require (
 	github.com/gookit/color v1.5.4 // indirect

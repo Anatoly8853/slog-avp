@@ -1,23 +1,21 @@
 package main
 
-import (
-	"github.com/Anatoly8853/slog-avp"
-)
-
-func SetupApplication() *slogavp.Application {
-	// Настройка логгера перед его инициализацией
-	slogavp.SetLogConsole(false) // Логи будут записываться в файл
-	slogavp.SetIsDebugMode(true)
-	slogavp.SetIsInfoMode(true)
-	slogavp.SetIsWarnMode(true)
-	// Настраиваем логгер
-	logger := slogavp.SetupLogger()
-	// Создаем экземпляр Application с настроенным логгером
-	return &slogavp.Application{Log: logger}
-}
+import slogavp "github.com/Anatoly8853/slog-avp"
 
 func main() {
-	// Настраиваем логгер
-	app := SetupApplication()
-	app.Log.Println("Ура работает")
+	// Настройка параметров логирования
+	slogavp.SetLogConsole(true)  // Включаем вывод в консоль
+	slogavp.SetLogToDB(true)     // Включаем логирование в БД
+	slogavp.SetIsDebugMode(true) // Включаем режим отладки
+	slogavp.SetIsInfoMode(true)  // Включаем информационный режим
+	slogavp.SetIsWarnMode(true)  // Включаем режим предупреждений
+
+	// Создаем экземпляр приложения с настроенным логгером
+	logger := slogavp.SetupLogger()
+
+	// Теперь все логи будут автоматически записываться в БД
+	logger.Debug("Отладочное сообщение")
+	logger.Info("Информационное сообщение")
+	logger.Warn("Предупреждение")
+	logger.Error("Сообщение об ошибке")
 }
