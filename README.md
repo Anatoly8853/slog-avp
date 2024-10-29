@@ -10,15 +10,22 @@
 Подробная информация о месте вызова (имя файла, номер строки, имя функции)
 Настраиваемый формат вывода логов
 Возможность включения/отключения различных режимов логирования
-Установка
-go get github.com/yourusername/slogavp
+
+## Установка
+
+```shell
+go get github.com/Anatoly8853/slog-avp
+```
+
 Зависимости
 github.com/gookit/slog - базовый функционал логирования
 github.com/mattn/go-sqlite3 - драйвер SQLite
 Базовое использование
+
+```go
 package main
 
-import "github.com/yourusername/slogavp"
+import "github.com/Anatoly8853/slog-avp"
 
 func main() {
 // Настройка параметров логирования
@@ -35,9 +42,12 @@ slogavp.SetIsDebugMode(true)     // Включаем режим отладки
     logger.Warn("Предупреждение")
     logger.Error("Сообщение об ошибке")
 }
+```
+
 Структура логов в БД
 Логи сохраняются в таблице следующей структуры:
 
+```SQLite
 CREATE TABLE logs (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 timestamp DATETIME,
@@ -47,6 +57,8 @@ file_name TEXT,
 line_number INTEGER,
 function_name TEXT
 );
+```
+
 Конфигурация
 Библиотека предоставляет следующие функции для настройки:
 
