@@ -26,6 +26,7 @@ var (
 	IsInfoMode  = true  // Информационный режим (по умолчанию: включен)
 	IsWarnMode  = true  // Режим предупреждений (по умолчанию: включен)
 	db          *sql.DB // Подключение к SQLite
+	DBPath      string
 )
 
 // SetLogConsole устанавливает флаг логирования в консоль
@@ -51,6 +52,11 @@ func SetIsInfoMode(value bool) {
 // SetIsWarnMode устанавливает флаг режима предупреждений
 func SetIsWarnMode(value bool) {
 	IsWarnMode = value
+}
+
+// hasDBExtension проверяет, имеет ли файл расширение .db
+func hasDBExtension(filename string) bool {
+	return strings.HasSuffix(strings.ToLower(filename), ".db")
 }
 
 // CustomFormatter предоставляет пользовательский формат логов
@@ -105,7 +111,15 @@ func getFunctionName(pc uintptr) string {
 // setupDBLogger инициализирует подключение к SQLite и создает таблицу логов
 func setupDBLogger() error {
 	// Определяем путь к базе данных
-	dbPath := "SQLetlog/logs.db"
+	dbPath := "log/logs.db"
+	if DBPath != "" && len(DBPath) > 3 {
+		dbPath = DBPath
+	}
+
+	// Проверяем и добавляем расширение .db если его нет
+	if !hasDBExtension(dbPath) {
+		dbPath = dbPath + ".db"
+	}
 
 	// Создаем директорию, если она не существует
 	err := os.MkdirAll(filepath.Dir(dbPath), 0755)
@@ -163,8 +177,17 @@ func writeLogToDB(level, message, fileName string, lineNumber int, functionName 
 
 // SetupLogger настраивает и возвращает логгер
 func SetupLogger() *slog.Logger {
+	// Создаем логгер
 	logger := slog.New()
+
+	// Устанавливаем форматтер
 	formatter := &CustomFormatter{}
+
+	// Настройка цветного вывода
+	slog.Configure(func(logger *slog.SugaredLogger) {
+		f := logger.Formatter.(*slog.TextFormatter)
+		f.EnableColor = true
+	})
 
 	if logToDB {
 		err := setupDBLogger()
@@ -178,22 +201,24 @@ func SetupLogger() *slog.Logger {
 		consoleHandler.SetFormatter(formatter)
 		logger.AddHandler(consoleHandler)
 	} else {
-		now := time.Now()
-		logFilePath := fmt.Sprintf("log/error-%s.log", now.Format("02-01-2006"))
+		if !logToDB {
+			now := time.Now()
+			logFilePath := fmt.Sprintf("log/error-%s.log", now.Format("02-01-2006"))
 
-		err := os.MkdirAll(filepath.Dir(logFilePath), 0755)
-		if err != nil {
-			panic(fmt.Sprintf("Ошибка создания директории логов: %v", err))
+			err := os.MkdirAll(filepath.Dir(logFilePath), 0755)
+			if err != nil {
+				panic(fmt.Sprintf("Ошибка создания директории логов: %v", err))
+			}
+
+			logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+			if err != nil {
+				panic(fmt.Sprintf("Ошибка открытия файла логов: %v", err))
+			}
+
+			fileHandler := handler.NewIOWriterHandler(logFile, getLogLevels())
+			fileHandler.SetFormatter(formatter)
+			logger.AddHandler(fileHandler)
 		}
-
-		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			panic(fmt.Sprintf("Ошибка открытия файла логов: %v", err))
-		}
-
-		fileHandler := handler.NewIOWriterHandler(logFile, getLogLevels())
-		fileHandler.SetFormatter(formatter)
-		logger.AddHandler(fileHandler)
 	}
 
 	return logger
