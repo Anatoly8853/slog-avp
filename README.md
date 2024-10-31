@@ -55,6 +55,12 @@ package main
 import "github.com/Anatoly8853/slog-avp"
 
 func main() {
+	// Включаем логирование в БД
+	slogavp.SetLogToDB(true)
+	//Отключаем запись в консоль и если ведем запись в бд отключается запись в файл
+	slogavp.SetLogConsole(false)
+	//slogavp.DBPath = "log/logs.db" путь и файл по умолчанию
+	
 // Создаем экземпляр приложения с настроенным логгером
 app := slogavp.SetupApplication()
 
