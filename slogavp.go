@@ -19,14 +19,15 @@ type Application struct {
 	Log *slog.Logger
 }
 
+// Глобальные переменные для управления режимами логирования
 var (
-	logConsole  = true  // Вывод в консоль (по умолчанию: включен)
+	logConsole  = true  // Логирование в консоль (по умолчанию: включено)
 	logToDB     = false // Логирование в SQLite (по умолчанию: выключено)
 	IsDebugMode = true  // Режим отладки (по умолчанию: включен)
 	IsInfoMode  = true  // Информационный режим (по умолчанию: включен)
 	IsWarnMode  = true  // Режим предупреждений (по умолчанию: включен)
 	db          *sql.DB // Подключение к SQLite
-	DBPath      string
+	DBPath      string  // Путь к базе данных SQLite
 )
 
 // SetLogConsole устанавливает флаг логирования в консоль
@@ -59,29 +60,16 @@ func hasDBExtension(filename string) bool {
 	return strings.HasSuffix(strings.ToLower(filename), ".db")
 }
 
-// CustomFormatter предоставляет пользовательский формат логов
+// CustomFormatter - пользовательский форматтер для вывода логов
 type CustomFormatter struct{}
 
-// Format реализует интерфейс slog.Formatter
+// Format форматирует запись лога и записывает в БД, если включено логирование в SQLite
 func (f *CustomFormatter) Format(record *slog.Record) ([]byte, error) {
 	caller := record.Caller
 	fileName := filepath.Base(caller.File)
 	funcName := getFunctionName(caller.PC)
 
-	// Если включено логирование в БД, записываем лог
-	if logToDB {
-		err := writeLogToDB(
-			record.Level.String(),
-			record.Message,
-			fileName,
-			caller.Line,
-			funcName,
-		)
-		if err != nil {
-			fmt.Printf("Ошибка записи в БД: %v\n", err)
-		}
-	}
-
+	// Форматируем сообщение для вывода
 	logMessage := fmt.Sprintf("[%s] [%s] [%s:%d,%s] [%s]\n",
 		record.Level.String(),
 		record.Time.Format("2006-01-02 15:04:05"),
@@ -93,7 +81,7 @@ func (f *CustomFormatter) Format(record *slog.Record) ([]byte, error) {
 	return []byte(logMessage), nil
 }
 
-// getFunctionName возвращает короткое имя функции из PC
+// getFunctionName возвращает имя функции из Program Counter (PC)
 func getFunctionName(pc uintptr) string {
 	fn := runtime.FuncForPC(pc)
 	if fn == nil {
@@ -108,32 +96,31 @@ func getFunctionName(pc uintptr) string {
 	return shortName
 }
 
-// setupDBLogger инициализирует подключение к SQLite и создает таблицу логов
+// setupDBLogger инициализирует базу данных и создает таблицу логов, если она не существует
 func setupDBLogger() error {
-	// Определяем путь к базе данных
 	dbPath := "log/logs.db"
 	if DBPath != "" && len(DBPath) > 3 {
 		dbPath = DBPath
 	}
 
-	// Проверяем и добавляем расширение .db если его нет
+	// Проверка на наличие расширения .db
 	if !hasDBExtension(dbPath) {
 		dbPath = dbPath + ".db"
 	}
 
-	// Создаем директорию, если она не существует
+	// Создание директории для базы данных, если она не существует
 	err := os.MkdirAll(filepath.Dir(dbPath), 0755)
 	if err != nil {
 		return fmt.Errorf("ошибка создания директории для базы данных: %v", err)
 	}
 
-	// Открываем соединение с базой данных
-	var err1 error
-	db, err1 = sql.Open("sqlite3", dbPath)
-	if err1 != nil {
-		return fmt.Errorf("ошибка открытия базы данных: %v", err1)
+	// Открытие соединения с базой данных
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return fmt.Errorf("ошибка открытия базы данных: %v", err)
 	}
 
+	// Создание таблицы для логов, если она еще не создана
 	createTableSQL := `
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,12 +136,13 @@ func setupDBLogger() error {
 	return err
 }
 
-// logToDB записывает лог в базу данных SQLite
+// writeLogToDB записывает лог в базу данных SQLite
 func writeLogToDB(level, message, fileName string, lineNumber int, functionName string) error {
 	if db == nil {
 		return fmt.Errorf("подключение к базе данных не инициализировано")
 	}
 
+	// Подготовка SQL-запроса для вставки данных
 	stmt, err := db.Prepare(`
         INSERT INTO logs (timestamp, level, message, file_name, line_number, function_name)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -164,6 +152,7 @@ func writeLogToDB(level, message, fileName string, lineNumber int, functionName 
 	}
 	defer stmt.Close()
 
+	// Выполнение SQL-запроса с текущими данными лога
 	_, err = stmt.Exec(
 		time.Now(),
 		level,
@@ -175,56 +164,87 @@ func writeLogToDB(level, message, fileName string, lineNumber int, functionName 
 	return err
 }
 
-// SetupLogger настраивает и возвращает логгер
-func SetupLogger() *slog.Logger {
-	// Создаем логгер
-	logger := slog.New()
+// DBHandler - обработчик для логирования в базу данных
+type DBHandler struct{}
 
-	// Устанавливаем форматтер
+// Handle записывает лог в базу данных
+func (h *DBHandler) Handle(record *slog.Record) error {
+	caller := record.Caller
+	fileName := filepath.Base(caller.File)
+	funcName := getFunctionName(caller.PC)
+
+	return writeLogToDB(
+		record.Level.String(),
+		record.Message,
+		fileName,
+		caller.Line,
+		funcName,
+	)
+}
+
+// Close завершает работу обработчика (метод необходим для интерфейса slog.Handler)
+func (h *DBHandler) Close() error {
+	return nil // Метод может оставаться пустым, если закрывать ничего не нужно
+}
+
+// Flush завершает запись логов (метод необходим для интерфейса slog.Handler)
+func (h *DBHandler) Flush() error {
+	return nil // Метод может оставаться пустым, если завершать запись логов не требуется
+}
+
+// IsHandling проверяет, может ли обработчик обрабатывать указанный уровень логирования
+func (h *DBHandler) IsHandling(level slog.Level) bool {
+	// Можно вернуть true для обработки всех уровней
+	return true
+}
+
+// SetupLogger настраивает логгер с указанными обработчиками и форматтером
+func SetupLogger() *slog.Logger {
+	// Создаем новый логгер
+	logger := slog.New()
 	formatter := &CustomFormatter{}
 
-	// Настройка цветного вывода
-	slog.Configure(func(logger *slog.SugaredLogger) {
-		f := logger.Formatter.(*slog.TextFormatter)
-		f.EnableColor = true
-	})
-
+	// Настройка логирования в БД, если это включено
 	if logToDB {
 		err := setupDBLogger()
 		if err != nil {
 			fmt.Printf("Не удалось настроить логгер базы данных: %v\n", err)
+		} else {
+			// Добавляем обработчик базы данных
+			dbHandler := &DBHandler{}
+			logger.AddHandler(dbHandler)
 		}
 	}
 
+	// Настройка логирования в консоль, если это включено
 	if logConsole {
 		consoleHandler := handler.NewConsoleHandler(getLogLevels())
 		consoleHandler.SetFormatter(formatter)
 		logger.AddHandler(consoleHandler)
-	} else {
-		if !logToDB {
-			now := time.Now()
-			logFilePath := fmt.Sprintf("log/error-%s.log", now.Format("02-01-2006"))
+	} else if !logToDB {
+		// Если ни консоль, ни БД не включены, настраиваем логирование в файл
+		now := time.Now()
+		logFilePath := fmt.Sprintf("log/error-%s.log", now.Format("02-01-2006"))
 
-			err := os.MkdirAll(filepath.Dir(logFilePath), 0755)
-			if err != nil {
-				panic(fmt.Sprintf("Ошибка создания директории логов: %v", err))
-			}
-
-			logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-			if err != nil {
-				panic(fmt.Sprintf("Ошибка открытия файла логов: %v", err))
-			}
-
-			fileHandler := handler.NewIOWriterHandler(logFile, getLogLevels())
-			fileHandler.SetFormatter(formatter)
-			logger.AddHandler(fileHandler)
+		err := os.MkdirAll(filepath.Dir(logFilePath), 0755)
+		if err != nil {
+			panic(fmt.Sprintf("Ошибка создания директории логов: %v", err))
 		}
+
+		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			panic(fmt.Sprintf("Ошибка открытия файла логов: %v", err))
+		}
+
+		fileHandler := handler.NewIOWriterHandler(logFile, getLogLevels())
+		fileHandler.SetFormatter(formatter)
+		logger.AddHandler(fileHandler)
 	}
 
 	return logger
 }
 
-// getLogLevels возвращает список активных уровней логирования
+// getLogLevels возвращает список уровней логирования, которые включены
 func getLogLevels() []slog.Level {
 	levels := []slog.Level{slog.ErrorLevel, slog.FatalLevel}
 
@@ -241,7 +261,7 @@ func getLogLevels() []slog.Level {
 	return levels
 }
 
-// SetupApplication создает и настраивает новый экземпляр приложения
+// SetupApplication создает и возвращает экземпляр приложения с настроенным логгером
 func SetupApplication() *Application {
 	return &Application{Log: SetupLogger()}
 }
