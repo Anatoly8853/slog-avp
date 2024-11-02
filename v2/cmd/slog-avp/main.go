@@ -1,6 +1,6 @@
 package main
 
-import slogavp "github.com/Anatoly8853/slog-avp"
+import slogavp "github.com/Anatoly8853/slog-avp/v2"
 
 func main() {
 	// Включаем логирование в БД
