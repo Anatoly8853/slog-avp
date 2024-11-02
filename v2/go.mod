@@ -1,9 +1,9 @@
-module github.com/Anatoly8853/slog-avp
+module github.com/Anatoly8853/slog-avp/v2
 
 go 1.22.0
 
 require (
-	github.com/gookit/slog v0.5.6
+	github.com/gookit/slog v0.5.7
 	github.com/mattn/go-sqlite3 v1.14.24
 )
 

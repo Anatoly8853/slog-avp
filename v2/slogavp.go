@@ -1,4 +1,4 @@
-package slogavp
+package v2
 
 import (
 	"database/sql"
