@@ -18,7 +18,7 @@
 ## Установка
 
 ```shell
-go get github.com/Anatoly8853/slog-avp
+go get github.com/Anatoly8853/slog-avp/v2
 ```
 
 Зависимости
@@ -29,7 +29,7 @@ github.com/mattn/go-sqlite3 - драйвер SQLite
 ```go
 package main
 
-import "github.com/Anatoly8853/slog-avp"
+import "github.com/Anatoly8853/slog-avp/v2"
 
 func main() {
     // Настройка параметров логирования
@@ -49,10 +49,11 @@ func main() {
 ```
 
 Пример использования структуры Application:
+
 ```go
 package main
 
-import "github.com/Anatoly8853/slog-avp"
+import "github.com/Anatoly8853/slog-avp/v2"
 
 func main() {
 	// Включаем логирование в БД
@@ -63,15 +64,15 @@ func main() {
 	//slogavp.DBPath = "log/logs.db" путь и файл по умолчанию
 	
 	// Создаем экземпляр приложения с настроенным логгером
-    app := slogavp.SetupApplication()
+        app := slogavp.SetupApplication()
 
-    // Используем логгер через структуру приложения
-    app.Log.Info("Приложение запущено")
-    app.Log.Debug("Отладочное сообщение")
-    app.Log.Error("Произошла ошибка")
+        // Используем логгер через структуру приложения
+        app.Log.Info("Приложение запущено")
+        app.Log.Debug("Отладочное сообщение")
+        app.Log.Error("Произошла ошибка")
     
-    // В других функциях или методах
-    doSomething(app)
+        // В других функциях или методах
+        doSomething(app)
 }
 
 func doSomething(app *slogavp.Application) {
@@ -86,13 +87,13 @@ func doSomething(app *slogavp.Application) {
 
 ```SQLite
 CREATE TABLE logs (
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-timestamp DATETIME,
-level VARCHAR(10),
-message TEXT,
-file_name TEXT,
-line_number INTEGER,
-function_name TEXT
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       timestamp DATETIME,
+       level VARCHAR(10),
+       message TEXT,
+       file_name TEXT,
+       line_number INTEGER,
+       function_name TEXT
 );
 ```
 
