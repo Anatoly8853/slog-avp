@@ -14,6 +14,16 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// ANSI escape-коды для цветов
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorGray   = "\033[90m"
+)
+
 // Application - структура приложения, содержащая логгер
 type Application struct {
 	Log *slog.Logger
@@ -69,16 +79,35 @@ func (f *CustomFormatter) Format(record *slog.Record) ([]byte, error) {
 	fileName := filepath.Base(caller.File)
 	funcName := getFunctionName(caller.PC)
 
-	// Форматируем сообщение для вывода
-	logMessage := fmt.Sprintf("[%s] [%s] [%s:%d,%s] [%s]\n",
-		record.Level.String(),
+	// Определяем цвет в зависимости от уровня
+	levelColor := getLevelColor(record.Level)
+	levelStr := fmt.Sprintf("%s[%s]%s", levelColor, record.Level.String(), colorReset)
+
+	logMessage := fmt.Sprintf("%s [%s] [%s:%d,%s] [%s]\n",
+		levelStr,
 		record.Time.Format("2006-01-02 15:04:05"),
 		fileName,
 		caller.Line,
 		funcName,
 		record.Message,
 	)
+
 	return []byte(logMessage), nil
+}
+
+func getLevelColor(level slog.Level) string {
+	switch level {
+	case slog.InfoLevel:
+		return colorGreen
+	case slog.ErrorLevel, slog.FatalLevel:
+		return colorRed
+	case slog.WarnLevel:
+		return colorYellow
+	case slog.DebugLevel:
+		return colorGray
+	default:
+		return colorReset
+	}
 }
 
 // getFunctionName возвращает имя функции из Program Counter (PC)
