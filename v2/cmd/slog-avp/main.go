@@ -4,9 +4,10 @@ import slogavp "github.com/Anatoly8853/slog-avp/v2"
 
 func main() {
 	// Включаем логирование в БД
-	slogavp.SetLogToDB(true)
+	//slogavp.SetLogToDB(true)   // Логирование в SQLite (по умолчанию: выключено)
 	//Отключаем запись в консоль и если ведем запись в бд отключается запись в файл
-	slogavp.SetLogConsole(false)
+	//slogavp.SetLogConsole(true) // Логирование в консоль (по умолчанию: включено)
+	//slogavp.SetLogConsole(false)
 	//slogavp.DBPath = "log/logs.db" путь и файл по умолчанию
 
 	// Создаем экземпляр приложения с настроенным логгером
