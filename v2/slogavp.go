@@ -40,6 +40,14 @@ type Config struct {
 	Warn       bool   // включить уровень Warn
 	DBPath     string // путь к файлу SQLite (используется, если LogToDB=true)
 	LogDir     string // директория для файлового логгера (по умолчанию "log")
+
+	// DBRetention, если > 0, включает периодическую очистку таблицы logs:
+	// записи старше этого возраста будут удаляться в фоне. По умолчанию
+	// выключено (0) - таблица растёт бесконечно, как и в первой версии пакета.
+	DBRetention time.Duration
+	// DBRetentionCheck задаёт, как часто запускать очистку (по умолчанию 1 час,
+	// если DBRetention > 0, а интервал не задан явно).
+	DBRetentionCheck time.Duration
 }
 
 // Option настраивает Config. Используется вместе с New.
@@ -58,6 +66,18 @@ func WithDebug(enabled bool) Option { return func(c *Config) { c.Debug = enabled
 func WithInfo(enabled bool) Option  { return func(c *Config) { c.Info = enabled } }
 func WithWarn(enabled bool) Option  { return func(c *Config) { c.Warn = enabled } }
 func WithLogDir(dir string) Option  { return func(c *Config) { c.LogDir = dir } }
+
+// WithDBRetention включает периодическую очистку таблицы logs от записей
+// старше maxAge. Требует, чтобы логирование в БД было включено (WithDB).
+func WithDBRetention(maxAge time.Duration) Option {
+	return func(c *Config) { c.DBRetention = maxAge }
+}
+
+// WithDBRetentionCheckInterval задаёт, как часто проверять и удалять
+// устаревшие записи (по умолчанию раз в час, если WithDBRetention включён).
+func WithDBRetentionCheckInterval(interval time.Duration) Option {
+	return func(c *Config) { c.DBRetentionCheck = interval }
+}
 
 func defaultConfig() Config {
 	return Config{
@@ -105,6 +125,9 @@ type Application struct {
 	dbCh    chan dbLogEntry
 	dbWG    sync.WaitGroup
 	logFile *os.File
+
+	retentionStop chan struct{}
+	retentionWG   sync.WaitGroup
 }
 
 type dbLogEntry struct {
@@ -114,6 +137,11 @@ type dbLogEntry struct {
 	fileName  string
 	line      int
 	function  string
+
+	// flush, если задан, помечает запись как маркер синхронизации, а не
+	// настоящий лог: runDBWriter просто закрывает этот канал вместо
+	// INSERT-а. Используется в Flush().
+	flush chan struct{}
 }
 
 // hasDBExtension проверяет, имеет ли файл расширение .db
@@ -234,7 +262,57 @@ func (app *Application) setupDB() error {
 	app.dbWG.Add(1)
 	go app.runDBWriter()
 
+	if app.cfg.DBRetention > 0 {
+		interval := app.cfg.DBRetentionCheck
+		if interval <= 0 {
+			interval = time.Hour
+		}
+		app.retentionStop = make(chan struct{})
+		app.retentionWG.Add(1)
+		go app.runRetention(interval)
+	}
+
 	return nil
+}
+
+// runRetention периодически удаляет из таблицы logs записи старше
+// app.cfg.DBRetention, пока не будет получен сигнал остановки через
+// retentionStop (закрывается в Close/CloseWithTimeout).
+func (app *Application) runRetention(interval time.Duration) {
+	defer app.retentionWG.Done()
+
+	app.pruneOldLogs()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			app.pruneOldLogs()
+		case <-app.retentionStop:
+			return
+		}
+	}
+}
+
+// pruneOldLogs удаляет из таблицы logs записи старше app.cfg.DBRetention.
+// Ошибки не прерывают работу приложения - только сообщаются в stderr,
+// чтобы временная недоступность БД не роняла фоновую очистку насовсем.
+func (app *Application) pruneOldLogs() {
+	if app.db == nil || app.cfg.DBRetention <= 0 {
+		return
+	}
+
+	cutoff := time.Now().Add(-app.cfg.DBRetention)
+	res, err := app.db.Exec(`DELETE FROM logs WHERE timestamp < ?`, cutoff)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logger: не удалось выполнить очистку старых логов: %v\n", err)
+		return
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		fmt.Fprintf(os.Stderr, "logger: очистка удалила %d устаревших записей логов\n", n)
+	}
 }
 
 // runDBWriter вычитывает dbCh и пишет записи в SQLite на одной горутине.
@@ -243,6 +321,11 @@ func (app *Application) setupDB() error {
 func (app *Application) runDBWriter() {
 	defer app.dbWG.Done()
 	for entry := range app.dbCh {
+		if entry.flush != nil {
+			close(entry.flush)
+			continue
+		}
+
 		_, err := app.stmt.Exec(
 			entry.timestamp,
 			entry.level,
@@ -422,16 +505,66 @@ func (app *Application) Fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
-// Close останавливает фоновую горутину записи в БД, закрывает
-// подготовленный запрос, соединение с БД и открытый файл логов.
+// Flush блокирует вызывающего до тех пор, пока фоновый писатель БД не
+// обработает все записи, поставленные в очередь до этого вызова. Полезно
+// перед действиями, которые должны видеть уже записанные логи (например,
+// перед чтением таблицы logs), и в тестах. Если логирование в БД не
+// включено - no-op. Не вызывайте Flush после Close - канал уже закрыт,
+// и отправка в него приведёт к панике.
+func (app *Application) Flush() {
+	if app.dbCh == nil {
+		return
+	}
+	done := make(chan struct{})
+	app.dbCh <- dbLogEntry{flush: done}
+	<-done
+}
+
+// Close останавливает фоновые горутины (запись в БД, очистка по retention),
+// закрывает подготовленный запрос, соединение с БД и открытый файл логов.
+// Ждёт завершения фонового писателя без ограничения по времени; если БД
+// может быть недоступна/зависать, используйте CloseWithTimeout.
 // Вызывать один раз при завершении работы приложения.
 func (app *Application) Close() error {
+	return app.closeInternal(0)
+}
+
+// CloseWithTimeout работает как Close, но не ждёт завершения фонового
+// писателя БД дольше timeout. Если писатель не успел закончить за
+// отведённое время, оставшиеся ресурсы (stmt, db, файл) всё равно
+// закрываются, а возвращённая ошибка содержит информацию о таймауте -
+// это не позволяет остановке приложения зависнуть навсегда из-за
+// недоступной БД.
+func (app *Application) CloseWithTimeout(timeout time.Duration) error {
+	return app.closeInternal(timeout)
+}
+
+func (app *Application) closeInternal(timeout time.Duration) error {
 	var errs []error
+
+	if app.retentionStop != nil {
+		close(app.retentionStop)
+		app.retentionWG.Wait()
+	}
 
 	if app.dbCh != nil {
 		close(app.dbCh)
-		app.dbWG.Wait()
+		if timeout <= 0 {
+			app.dbWG.Wait()
+		} else {
+			done := make(chan struct{})
+			go func() {
+				app.dbWG.Wait()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(timeout):
+				errs = append(errs, fmt.Errorf("не дождались завершения записи в БД за %s", timeout))
+			}
+		}
 	}
+
 	if app.stmt != nil {
 		if err := app.stmt.Close(); err != nil {
 			errs = append(errs, err)
