@@ -45,7 +45,11 @@ func TestLegacy_SetupApplication_FileLogger(t *testing.T) {
 		if err := os.Chdir(dir); err != nil {
 			t.Fatalf("Chdir: %v", err)
 		}
-		defer os.Chdir(wd)
+		defer func() {
+			if err := os.Chdir(wd); err != nil {
+				t.Logf("не удалось восстановить рабочую директорию %q: %v", wd, err)
+			}
+		}()
 
 		SetLogConsole(false)
 		SetLogToDB(false)

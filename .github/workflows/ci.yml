@@ -14,9 +14,12 @@ jobs:
   test:
     name: Build, vet & test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v2
     strategy:
       matrix:
-        go-version: [1.23"]
+        go-version: ["1.23"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,6 +29,7 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
+          cache-dependency-path: v2/go.sum
 
       # cgo нужен для github.com/mattn/go-sqlite3
       - name: Install build dependencies
@@ -52,8 +56,10 @@ jobs:
         with:
           go-version: "1.23"
           cache: true
+          cache-dependency-path: v2/go.sum
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          working-directory: v2
