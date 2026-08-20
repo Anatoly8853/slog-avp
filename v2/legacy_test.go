@@ -45,18 +45,17 @@ func TestLegacy_SetupApplication_FileLogger(t *testing.T) {
 		if err := os.Chdir(dir); err != nil {
 			t.Fatalf("Chdir: %v", err)
 		}
-		defer os.Chdir(wd)
+		defer func() {
+			if err := os.Chdir(wd); err != nil {
+				t.Logf("не удалось восстановить рабочую директорию %q: %v", wd, err)
+			}
+		}()
 
 		SetLogConsole(false)
 		SetLogToDB(false)
 
 		app := SetupApplication()
-		defer func(app *Application) {
-			err := app.Close()
-			if err != nil {
-
-			}
-		}(app)
+		defer app.Close()
 
 		app.Log.Info("legacy сообщение")
 
@@ -87,12 +86,7 @@ func TestLegacy_SetupApplication_DB(t *testing.T) {
 		DBPath = filepath.Join(dir, "legacy-logs.db")
 
 		app := SetupApplication()
-		defer func(app *Application) {
-			err := app.Close()
-			if err != nil {
-
-			}
-		}(app)
+		defer app.Close()
 
 		app.Log.Info("legacy db сообщение")
 		app.Flush()
