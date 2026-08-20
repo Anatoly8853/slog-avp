@@ -234,7 +234,10 @@ func (app *Application) setupDB() error {
         function_name TEXT
     );`
 	if _, err := db.Exec(createTableSQL); err != nil {
-		db.Close()
+		err := db.Close()
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("создание таблицы logs: %w", err)
 	}
 
@@ -242,7 +245,10 @@ func (app *Application) setupDB() error {
     CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
     CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level);`
 	if _, err := db.Exec(createIndexesSQL); err != nil {
-		db.Close()
+		err := db.Close()
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("создание индексов logs: %w", err)
 	}
 
@@ -251,7 +257,10 @@ func (app *Application) setupDB() error {
         VALUES (?, ?, ?, ?, ?, ?)
     `)
 	if err != nil {
-		db.Close()
+		err := db.Close()
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("подготовка INSERT-запроса: %w", err)
 	}
 

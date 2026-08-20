@@ -51,7 +51,12 @@ func TestLegacy_SetupApplication_FileLogger(t *testing.T) {
 		SetLogToDB(false)
 
 		app := SetupApplication()
-		defer app.Close()
+		defer func(app *Application) {
+			err := app.Close()
+			if err != nil {
+
+			}
+		}(app)
 
 		app.Log.Info("legacy сообщение")
 
@@ -82,7 +87,12 @@ func TestLegacy_SetupApplication_DB(t *testing.T) {
 		DBPath = filepath.Join(dir, "legacy-logs.db")
 
 		app := SetupApplication()
-		defer app.Close()
+		defer func(app *Application) {
+			err := app.Close()
+			if err != nil {
+
+			}
+		}(app)
 
 		app.Log.Info("legacy db сообщение")
 		app.Flush()

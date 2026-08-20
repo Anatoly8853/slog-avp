@@ -25,7 +25,12 @@ func main() {
 	}
 	// CloseWithTimeout вместо Close: если БД зависнет при остановке,
 	// приложение всё равно завершится максимум за 5 секунд.
-	defer app.CloseWithTimeout(5 * time.Second)
+	defer func(app *slogavp.Application, timeout time.Duration) {
+		err := app.CloseWithTimeout(timeout)
+		if err != nil {
+
+		}
+	}(app, 5*time.Second)
 
 	app.Log.Info("Приложение запущено")
 	app.Log.Debug("Отладочное сообщение")
