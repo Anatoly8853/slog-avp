@@ -28,7 +28,7 @@ func main() {
 	defer func(app *slogavp.Application, timeout time.Duration) {
 		err := app.CloseWithTimeout(timeout)
 		if err != nil {
-
+			fmt.Fprintf(os.Stderr, "не удалось настроить логгер: %v\n", err)
 		}
 	}(app, 5*time.Second)
 
